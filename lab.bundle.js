@@ -79015,8 +79015,9 @@ function createAnatomy(parent) {
   }
   // Nerve exit is displaced from the optical axis; the retinal image is separate.
   const discPos=new THREE.Vector3(1.015,-.10,-.40);
-  const disc=solid(new THREE.SphereGeometry(.14,24,16),tissue(0xf0bf85),discPos.toArray());disc.scale.x=.16;
-  const cup=solid(new THREE.SphereGeometry(.08,24,16),tissue(0xf8e4be),[1.039,-.10,-.40]);cup.scale.x=.2;
+  const disc=solid(new THREE.RingGeometry(.055,.14,48),tissue(0xf0bf85,{side:THREE.DoubleSide}),discPos.toArray());disc.rotation.y=Math.PI/2;
+  // Recessed central cup, behind the annular neural rim when viewed from inside.
+  const cup=solid(new THREE.CircleGeometry(.055,48),tissue(0xf8e4be,{side:THREE.DoubleSide}),[1.045,-.10,-.40]);cup.rotation.y=Math.PI/2;
   const nerve=solid(new THREE.CylinderGeometry(.13,.165,.72,32),tissue(0xe5c59b,{transparent:true,opacity:.8}),[1.39,-.10,-.40]);nerve.rotation.z=-Math.PI/2;
   const nerveFibres=new THREE.Group();parent.add(nerveFibres);
   const fibres=[],signals=[];
@@ -79031,7 +79032,8 @@ function createAnatomy(parent) {
   }
   let damage=0,isGlaucoma=false;
   function setGlaucoma(active,stage){
-    isGlaucoma=active;damage=active?stage:0;cup.scale.y=cup.scale.z=active?1+stage*.55:1;
+    isGlaucoma=active;damage=active?stage:0;cup.scale.x=cup.scale.y=1+damage;
+    if(disc.userData.damage!==damage){disc.geometry.dispose();disc.geometry=new THREE.RingGeometry(.055*(1+damage),.14,48);disc.userData.damage=damage;}
     nerve.material.opacity=active?.23:.8;nerveFibres.visible=active&&frontShell.visible===false;
     // Selected superior/inferior bundles are affected first; counts are illustrative.
     const order=[3,4,5,11,12,13,2,6,10,14,1,7,9,15];
