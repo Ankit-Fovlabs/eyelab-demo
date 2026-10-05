@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#102839"><meta name="description" content="Explore myopia, hyperopia, glaucoma and cataract in an interactive 3D eye laboratory.">
+  <title>Human Eye · Interactive Laboratory</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">◉</span><div><h1>Human Eye</h1><p>Defects &amp; correction</p></div></div><div class="top-actions"><span class="platform">Interactive laboratory</span><button id="vr" class="primary">Enter VR</button></div></header>
+  <main>
+    <nav class="modules" aria-label="Eye conditions">
+      <button data-condition="myopia" aria-pressed="true"><span>01</span>Myopia<small>Short-sightedness</small></button>
+      <button data-condition="hyperopia" aria-pressed="false"><span>02</span>Hyperopia<small>Long-sightedness</small></button>
+      <button data-condition="glaucoma" aria-pressed="false"><span>03</span>Glaucoma<small>Optic nerve damage</small></button>
+      <button data-condition="cataract" aria-pressed="false"><span>04</span>Cataract<small>Cloudy lens</small></button>
+    </nav>
+    <div class="workspace">
+      <section class="experiment" aria-label="Interactive 3D experiment">
+        <div class="scene-top"><div><span class="eyebrow">EXPERIMENT <span id="experiment-number">01</span></span><h2 id="scene-title">Where does light focus?</h2></div><div class="view-actions"><button id="anatomy-toggle" aria-pressed="false">Show intact eye</button><button id="home" class="quiet">Reset view</button></div></div>
+        <div id="viewport"><div id="loading">Preparing your eye laboratory…</div><div class="scene-hint">Drag to orbit · Scroll to zoom</div><div class="legend"><span class="ray-dot"></span> Light rays <span class="retina-dot"></span> Retina</div></div>
+        <div class="controls">
+          <div class="mode-row" role="group" aria-label="Experiment mode"><button data-mode="normal" aria-pressed="false">Normal</button><button data-mode="condition" aria-pressed="true">Condition</button><button data-mode="correction" aria-pressed="false" id="correction-mode">Correction</button></div>
+          <div class="sliders"><label id="power-control"><span>Lens power <output id="power-value">0.0 D</output></span><input id="power" type="range" min="-6" max="6" step="0.25" value="0"></label><label id="distance-control"><span>Object distance <output id="distance-value">6.0 m</output></span><input id="distance" type="range" min="0.25" max="10" step="0.25" value="6"></label><label id="stage-control" hidden><span>Illustrative stage <output id="stage-value">Moderate</output></span><input id="stage" type="range" min="0" max="1" step="0.05" value="0.5"></label></div>
+          <div class="control-bottom"><button id="apply" class="primary">Apply concave lens</button><label class="toggle"><input id="rays" type="checkbox" checked>Light rays</label><button id="reset" class="quiet">Reset experiment</button></div>
+        </div>
+      </section>
+      <aside class="observation">
+        <div class="section-heading"><span class="eyebrow">OBSERVATION</span><span class="live-label">Current view</span></div>
+        <div class="vision-frame"><canvas id="vision" width="720" height="420" aria-label="Illustrative view through the selected eye condition"></canvas><span id="vision-caption">Without correction</span></div>
+        <div class="comparison"><button id="compare">Hold to compare with normal vision</button></div>
+        <div class="finding"><span id="result-tag">FOCUS BEFORE RETINA</span><h3 id="finding-title">Distant objects look blurred</h3><p id="finding-text"></p></div>
+        <div class="anatomy"><h3>Inside the eye</h3><div id="anatomy-text"></div></div>
+        <details class="learn"><summary>Try it yourself</summary><p id="task-text"></p><label for="answer">Which intervention fits this condition?</label><select id="answer"><option value="">Choose an answer</option><option value="concave">Concave lens</option><option value="convex">Convex lens</option><option value="pressure">Lower eye pressure</option><option value="replacement">Replace the cloudy lens</option></select><p id="feedback" role="status"></p></details>
+      </aside>
+    </div>
+    <footer><span>Educational simulation · Eye model and effects are schematic</span><details><summary>Scientific notes &amp; sources</summary><p>Myopia and hyperopia use a simplified thin-eye model with limited accommodation. Ray displacement is enlarged for teaching. Vision effects illustrate concepts and do not reproduce a particular person's vision. Hyperopia here means refractive long-sightedness, rather than age-related presbyopia. Glaucoma can occur at normal eye pressure; early disease may have no symptoms. Treatment does not restore lost vision. Cataract replacement shows an idealized outcome.</p><p>Sources: <a href="https://www.nei.nih.gov/eye-health-information/eye-conditions-and-diseases/nearsightedness-myopia" target="_blank" rel="noopener">Myopia</a> · <a href="https://www.nei.nih.gov/eye-health-information/eye-conditions-and-diseases/farsightedness-hyperopia" target="_blank" rel="noopener">Hyperopia</a> · <a href="https://www.nei.nih.gov/eye-health-information/eye-conditions-and-diseases/glaucoma" target="_blank" rel="noopener">Glaucoma</a> · <a href="https://www.nei.nih.gov/eye-health-information/eye-conditions-and-diseases/cataracts" target="_blank" rel="noopener">Cataracts</a></p></details></footer>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+  </main>
+  <script src="./startup.js"></script>
+  <script src="./lab.bundle.js"></script>
+</body></html>
