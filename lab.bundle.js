@@ -78895,17 +78895,43 @@ return {...THREE,OrbitControls};})();
 const lessons={
  myopia:{name:'Myopia',number:'01',title:'Where does light focus?',intervention:'concave',apply:'Apply concave lens',anatomy:'<strong>Cornea & lens</strong> bend incoming light.<br><strong>Retina</strong> receives the focused image.<br>An eye that is too long, or has too much optical power, can focus distant light before the retina.',task:'Select Correction, then adjust lens power until the focus reaches the retina. Move the object closer and compare the result.',correctPower:-4},
  hyperopia:{name:'Hyperopia',number:'02',title:'Bring near objects into focus',intervention:'convex',apply:'Apply convex lens',anatomy:'<strong>Cornea & lens</strong> bend incoming light.<br><strong>Accommodation</strong> adds focusing power.<br>A short eye or too little optical power can leave the focus behind the retina when accommodation is insufficient.',task:'Bring the object close to the eye. Select Correction and adjust a positive lens power until the focus reaches the retina.',correctPower:4},
- glaucoma:{name:'Glaucoma',number:'03',title:'Protect the optic nerve',intervention:'pressure',apply:'Show pressure-lowering treatment',anatomy:'<strong>Optic nerve</strong> carries visual signals to the brain.<br><strong>Aqueous fluid</strong> drains from the front of the eye.<br>High pressure is a risk factor. Glaucoma can also develop at normal pressure.',task:'Increase the illustrative stage and observe changes in the visual field. Apply treatment: remaining vision is protected, but the lost field does not return.'},
+ glaucoma:{name:'Glaucoma',number:'03',title:'A focused image, a damaged nerve pathway',intervention:'pressure',apply:'Lower pressure · protect remaining vision',anatomy:'<strong>Retina:</strong> light forms an inverted optical image here. Photoreceptors convert light into electrical signals.<br><strong>Retinal ganglion cells:</strong> their axons carry signals through the optic disc and optic nerve to the brain. Glaucoma damages these cells and axons.<br><strong>Optic disc:</strong> the nerve exit has no photoreceptors (the natural blind spot). It is not the image-forming surface.',task:'Compare the healthy and damaged optic disc. Increase nerve damage: light still reaches the retina, but patchy areas of the visual field become harder to detect. Apply pressure-lowering treatment: the existing damage stays.'},
  cataract:{name:'Cataract',number:'04',title:'What happens when the lens clouds?',intervention:'replacement',apply:'Replace cloudy lens',anatomy:'<strong>Lens</strong> normally transmits and focuses light.<br><strong>Cataract</strong> clouds the lens and scatters light.<br>Surgery replaces the cloudy lens with an artificial intraocular lens.',task:'Change the illustrative stage to explore haze and glare. Replace the cloudy lens and compare with normal vision.'}
 };
+// Paraxial reduced eye: equivalent cornea+lens plane, 24 mm retinal distance,
+// vitreous refractive index 1.336. Spectacle plane uses the displayed separation.
+// Surface aberrations, individual anatomy and accommodation dynamics are omitted.
+const eyeOptics={retinalDistance:.024,index:1.336,planeX:-.65,retinaX:1.10,scale:1.75/.024};
+eyeOptics.vertex=1.25/eyeOptics.scale;
 function optics(condition,distance,power=0,normal=false){
- const base=1/.024, error=normal?0:condition==='myopia'?4:condition==='hyperopia'?-4:0;
- const demand=1/distance;
- const accommodation=Math.max(0,Math.min(4,demand-error-power));
- const vergence=base+error+power+accommodation-demand;
- const imageDistance=1/vergence;
- const defocus=vergence-base;
- return {imageDistance,defocus,accommodation,focusOffset:(imageDistance-.024)*115,sharp:Math.abs(defocus)<.16};
+ const {retinalDistance,index,vertex}=eyeOptics,base=index/retinalDistance;
+ const error=normal?0:condition==='myopia'?4:condition==='hyperopia'?-4:0;
+ const atSpectacle=power-1/(distance-vertex);
+ const incomingVergence=atSpectacle/(1-vertex*atSpectacle);
+ const accommodation=Math.max(0,Math.min(4,-incomingVergence-error));
+ const eyePower=base+error+accommodation,vergence=eyePower+incomingVergence;
+ const imageDistance=index/vergence,defocus=vergence-base;
+ return {imageDistance,defocus,accommodation,eyePower,incomingVergence,power,distance,focusOffset:(imageDistance-retinalDistance)*eyeOptics.scale,sharp:Math.abs(defocus)<.16};
+}
+function prescription(condition){const e=condition==='myopia'?4:-4;return -e/(1-eyeOptics.vertex*e);}
+function traceEyeRay(o,angle,height){
+ const {vertex,index,scale,planeX}=eyeOptics,objectHeight=Math.tan(angle)*o.distance;
+ const d=o.distance-vertex;
+ const atSpectacle=(height+vertex*objectHeight/d)/(1+vertex/d-vertex*o.power);
+ const incident=(atSpectacle-objectHeight)/d;
+ const afterSpectacle=incident-o.power*atSpectacle;
+ const inside=(afterSpectacle-o.eyePower*height)/index;
+ const sourceX=-3.05,correctionX=planeX-vertex*scale;
+ const sourceY=atSpectacle*scale+incident*(sourceX-correctionX);
+ const start=[planeX,height*scale,0];
+ // Intersect the outgoing ray with the curved retinal shell. No light is drawn
+ // through the retina/optic nerve. Behind-retina focus is a dashed extension only.
+ const rx=planeX-.05,ry=height*scale,R=1.055;
+ const A=1+inside*inside,B=2*(rx+ry*inside),C=rx*rx+ry*ry-R*R;
+ const t=(-B+Math.sqrt(Math.max(0,B*B-4*A*C)))/(2*A);
+ const hit=[planeX+t,ry+t*inside,0];
+ const focus=[planeX+o.imageDistance*scale,(height+o.imageDistance*inside)*scale,0];
+ return {source:[sourceX,sourceY,0],spectacle:[correctionX,atSpectacle*scale,0],start,hit,focus,incident,afterSpectacle,inside};
 }
 function evaluate(state){
  const {condition,mode,distance,power,stage}=state,normal=mode==='normal';
@@ -78987,12 +79013,35 @@ function createAnatomy(parent) {
     const vessel=new THREE.Mesh(new THREE.TubeGeometry(curve,28,.008,5,false),tissue(j%2?0x973d36:0xc06352));vessels.add(vessel);
     for(let b=0;b<2;b++){const t=.35+b*.3,start=curve.getPoint(t),branch=[];for(let k=0;k<8;k++){const u=k/7;branch.push(surface(start.y+u*Math.cos(a+.75)*.18,start.z-u*.17));}vessels.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(branch),10,.0035,4,false),tissue(0xa8463d)));}
   }
-  const disc=solid(new THREE.SphereGeometry(.105,24,16),tissue(0xf0bf85),[1.085,-.05,-.095]);disc.scale.x=.16;
-  const nerve=solid(new THREE.CylinderGeometry(.13,.165,.72,32),tissue(0xe5c59b),[1.39,-.08,-.1]);nerve.rotation.z=-Math.PI/2;
-  for(let i=0;i<18;i++){const a=i/18*Math.PI*2;const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(1.08,-.08+Math.cos(a)*.13,-.1+Math.sin(a)*.13),new THREE.Vector3(1.74,-.08+Math.cos(a)*.115,-.1+Math.sin(a)*.115)]);parent.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:0xb99872})));}
+  // Nerve exit is displaced from the optical axis; the retinal image is separate.
+  const discPos=new THREE.Vector3(1.015,-.10,-.40);
+  const disc=solid(new THREE.SphereGeometry(.14,24,16),tissue(0xf0bf85),discPos.toArray());disc.scale.x=.16;
+  const cup=solid(new THREE.SphereGeometry(.08,24,16),tissue(0xf8e4be),[1.039,-.10,-.40]);cup.scale.x=.2;
+  const nerve=solid(new THREE.CylinderGeometry(.13,.165,.72,32),tissue(0xe5c59b,{transparent:true,opacity:.8}),[1.39,-.10,-.40]);nerve.rotation.z=-Math.PI/2;
+  const nerveFibres=new THREE.Group();parent.add(nerveFibres);
+  const fibres=[],signals=[];
+  for(let i=0;i<16;i++){
+    const a=i/16*Math.PI*2;
+    const start=surface(Math.cos(a)*.68,-.04-Math.abs(Math.sin(a))*.65);
+    const exit=new THREE.Vector3(1.08,-.10+Math.cos(a)*.095,-.40+Math.sin(a)*.095);
+    const end=new THREE.Vector3(1.85,exit.y,exit.z);
+    const curve=new THREE.CatmullRomCurve3([start,new THREE.Vector3(1.02,start.y*.65,start.z*.65-.13),discPos,exit,end]);
+    const f=new THREE.Mesh(new THREE.TubeGeometry(curve,40,.007,5,false),tissue(0x169eaf));nerveFibres.add(f);fibres.push(f);
+    const s=new THREE.Mesh(new THREE.SphereGeometry(.016,8,6),new THREE.MeshBasicMaterial({color:0x16e0c5}));nerveFibres.add(s);signals.push({mesh:s,curve});
+  }
+  let damage=0,isGlaucoma=false;
+  function setGlaucoma(active,stage){
+    isGlaucoma=active;damage=active?stage:0;cup.scale.y=cup.scale.z=active?1+stage*.55:1;
+    nerve.material.opacity=active?.23:.8;nerveFibres.visible=active&&frontShell.visible===false;
+    // Selected superior/inferior bundles are affected first; counts are illustrative.
+    const order=[3,4,5,11,12,13,2,6,10,14,1,7,9,15];
+    fibres.forEach((f,i)=>{const damaged=order.indexOf(i)>=0&&order.indexOf(i)<Math.floor(damage*14);f.userData.damaged=damaged;f.material.color.set(damaged?0x8e8986:0x169eaf);signals[i].mesh.visible=!damaged;});
+  }
+  function animateSignals(time){if(nerveFibres.visible)signals.forEach((s,i)=>s.mesh.position.copy(s.curve.getPoint((time*.00017+i/16)%1)));}
   const implant=solid(new THREE.TorusGeometry(.435,.014,8,64),tissue(0x52c7ca),[-.61,0,.015]);implant.rotation.y=Math.PI/2;implant.visible=false;
-  const setCutaway=value=>{frontShell.visible=!value;vessels.visible=value;};
-  return {lens,nerve,implant,setCutaway};
+  const setCutaway=value=>{frontShell.visible=!value;vessels.visible=value;nerveFibres.visible=value&&isGlaucoma;pupil.material.transparent=value;pupil.material.opacity=value?.08:1;};
+  setCutaway(true);
+  return {lens,nerve,implant,setCutaway,setGlaucoma,animateSignals};
 }
 
 
@@ -79051,15 +79100,14 @@ function initScene(){
  }
  eye=new THREE.Group();eye.position.set(.25,1.92,-2.6);eye.scale.setScalar(.78);scene.add(eye);
  anatomy=createAnatomy(eye);({lens,implant,nerve}=anatomy);
- damageGroup=new THREE.Group();eye.add(damageGroup);for(let i=0;i<9;i++)mesh(new THREE.SphereGeometry(.043,12,8),material(0x6f4947),damageGroup,[1.15+i*.05,-.1+Math.sin(i*2)*.1,.06]);
  corrective=new THREE.Group();corrective.position.set(-1.9,0,0);eye.add(corrective);
  const correctionLens=mesh(concaveGeometry,material(0x68d1df,{transparent:true,opacity:.55,roughness:.1,side:THREE.DoubleSide}),corrective);
  corrective.userData.body=correctionLens;
  fluidGroup=new THREE.Group();eye.add(fluidGroup);for(let i=0;i<12;i++)mesh(new THREE.SphereGeometry(.025,10,8),new THREE.MeshBasicMaterial({color:0x00a6bd}),fluidGroup);
- fluidGuide=label('FLUID DRAINAGE',[-.78,1.52,-2.5],.8,.13);
+ fluidGuide=label('AQUEOUS FLUID',[-.78,1.52,-2.5],.8,.13);
  const stand=mesh(new THREE.CylinderGeometry(.025,.025,.37,12),material(0x73909e),eye,[0,-1.28,-.18]);box(eye,[1.1,.08,.78],[0,-1.49,-.18],0xc5d6df);
  rayGroup=new THREE.Group();eye.add(rayGroup);
- label('CORNEA',[-.57,2.5,-2.6],.66,.13);label('LENS',[-.13,2.4,-2.5],.45,.13);label('RETINA',[.88,2.51,-2.6],.6,.13);label('OPTIC NERVE',[1.42,1.47,-2.6],.9,.13);
+ label('CORNEA',[-.57,2.5,-2.6],.66,.13);label('LENS',[-.13,2.4,-2.5],.45,.13);label('RETINAL IMAGE',[1.13,2.40,-2.60],.9,.13);label('OPTIC NERVE',[1.47,1.47,-2.91],.9,.13);
  const board=mesh(new THREE.PlaneGeometry(.52,.65),new THREE.MeshBasicMaterial({map:textTexture('E',256,320,{size:180})}),scene,[-2.65,2,-3.55]);board.rotation.y=.24;box(scene,[.04,.72,.04],[-2.65,1.31,-3.62],0x688798);
  createVRUI();
  new ResizeObserver(resize).observe($('viewport'));resize();
@@ -79070,18 +79118,15 @@ function initScene(){
 function resize(){if(!renderer)return;const r=$('viewport').getBoundingClientRect();camera.aspect=r.width/r.height;camera.fov=Math.min(65,42+Math.max(0,1.5-camera.aspect)*22);camera.updateProjectionMatrix();renderer.setSize(r.width,r.height);}
 function home(){camera.position.set(-1.35,2.55,.25);orbit.target.set(.05,1.85,-2.6);orbit.update();eye.rotation.y=0;}
 function updateRays(){
- disposeChildren(rayGroup);const result=evaluate(state),disease=['glaucoma','cataract'].includes(state.condition);
- const focus=1.04+(disease?0:result.focusOffset),show=state.mode==='correction'&&!disease;
- const focusY=0,sourceX=-3.05;
- for(let i=-2;i<=2;i++){
-  const y=i*.19,z=.09;
-  const points=show?[[sourceX,y*1.05,z],[-1.9,y,z],[-.65,y*.85,z],[focus,focusY,z],[1.06,(1.06-focus)*(-y*.85)/(focus+.65),z]]:[[sourceX,y,z],[-.65,y,z],[focus,focusY,z],[1.06,(1.06-focus)*(-y)/(focus+.65),z]];
-  line(points,colors.ray,rayGroup);
-  if(state.condition==='cataract'&&state.mode==='condition')line([[-.65,y,z],[1.02,y*.9+Math.sin(i*3)*state.stage*.25,z]],0xe5ca8b,rayGroup);
+ disposeChildren(rayGroup);const result=evaluate(state),show=Math.abs(result.power)>.01;
+ for(const angle of [-.10,.10])for(const height of [-.0012,0,.0012]){
+  const r=traceEyeRay(result,angle,height),color=angle>0?0xd45562:0x267ecb;
+  line(show?[r.source,r.spectacle,r.start,r.hit]:[r.source,r.start,r.hit],color,rayGroup);
+  if(r.focus[0]>r.hit[0]+.01){const g=new THREE.BufferGeometry().setFromPoints([r.hit,r.focus].map(p=>new THREE.Vector3(...p)));const l=new THREE.Line(g,new THREE.LineDashedMaterial({color,transparent:true,opacity:.55,dashSize:.04,gapSize:.035}));l.computeLineDistances();rayGroup.add(l);}
+  mesh(new THREE.SphereGeometry(result.sharp?.012:.018,8,6),new THREE.MeshBasicMaterial({color}),rayGroup,r.hit);
  }
- mesh(new THREE.SphereGeometry(.032,12,8),new THREE.MeshBasicMaterial({color:0xffca63}),rayGroup,[focus,0,.09]);
- // Dashed guide makes behind-retina focus visible as a schematic extension.
- if(focus>1.06)line([[1.06,-.65,.1],[1.06,.65,.1]],0xd57961,rayGroup);
+ // Reduced, inverted arrow on the retina: optical image never appears on the nerve.
+ if(result.sharp){const a=traceEyeRay(result,.10,0).hit,b=traceEyeRay(result,-.10,0).hit;line([a,b],0xf7f3cf,rayGroup);line([[a[0]-.015,a[1]+.04,0],a,[a[0]-.015,a[1]+.04,.035]],0xd45562,rayGroup);}
  rayGroup.visible=state.rays;
 }
 function updateModel(){
@@ -79090,9 +79135,32 @@ function updateModel(){
  if(corrective.visible){const positive=state.power>0;corrective.userData.body.geometry=positive?convexGeometry:concaveGeometry;corrective.userData.body.material.color.set(positive?0x87ded4:0x71c8e1);}
  const cloudy=state.condition==='cataract'&&state.mode==='condition';lens.material.color.set(cloudy?0xd7cfad:0xc6edf0);lens.material.opacity=cloudy?.7+state.stage*.28:.36;
  implant.visible=state.condition==='cataract'&&state.mode==='correction';
- damageGroup.visible=state.condition==='glaucoma'&&state.mode!=='normal';damageGroup.children.forEach((c,i)=>c.visible=i<Math.ceil(state.stage*9));
- nerve.material.color.set(state.condition==='glaucoma'&&state.mode!=='normal'?0xc49b7b:0xe6cb8f);updateRays();
+ anatomy.setGlaucoma(state.condition==='glaucoma',state.mode==='normal'?0:state.stage);updateRays();
  fluidGroup.visible=state.condition==='glaucoma';fluidGuide.visible=fluidGroup.visible;
+ updateOpticalDiagram();updateGlaucomaPanel();
+}
+function updateOpticalDiagram(){
+ const o=evaluate(state),map=p=>[290+(p[0]-eyeOptics.planeX)*125,120-p[1]*125];
+ const path=pts=>pts.map((p,i)=>{const [x,y]=map(p);return `${i?'L':'M'}${x.toFixed(2)},${y.toFixed(2)}`;}).join(' ');
+ let rays='';
+ for(const angle of [-.10,.10])for(const h of [-.0012,0,.0012]){
+  const r=traceEyeRay(o,angle,h),color=angle>0?'#c44458':'#227ac1';
+  rays+=`<path d="${path(Math.abs(o.power)>.01?[r.source,r.spectacle,r.start,r.hit]:[r.source,r.start,r.hit])}" stroke="${color}" fill="none" stroke-width="1.8"/>`;
+  if(r.focus[0]>r.hit[0]+.01)rays+=`<path d="${path([r.hit,r.focus])}" stroke="${color}" fill="none" stroke-dasharray="5 4" opacity=".55"/>`;
+  const [x,y]=map(r.hit);rays+=`<circle cx="${x}" cy="${y}" r="${o.sharp?2.5:4}" fill="${color}" opacity=".7"/>`;
+ }
+ const a=map(traceEyeRay(o,.10,0).hit),b=map(traceEyeRay(o,-.10,0).hit);
+ const image=o.sharp?`<path d="M${b[0]},${b[1]} L${a[0]},${a[1]} m-5,-8 l5,8 5,-8" fill="none" stroke="#485b63" stroke-width="2"/>`:'';
+ $('optical-diagram').innerHTML=`<svg viewBox="0 0 630 230" role="img" aria-label="Red rays from the top and blue rays from the bottom of an object cross and reach the retina. The optic nerve carries signals, not an optical image."><rect width="630" height="230" rx="12" fill="#f0f6f8"/><path d="M290,12 Q410,-2 510,30 Q550,120 510,210 Q410,242 290,228" fill="#fbe9dc" opacity=".45"/><line x1="24" y1="120" x2="603" y2="120" stroke="#9fb3bd" stroke-dasharray="3 4"/><path d="M506,30 Q547,120 506,210" fill="none" stroke="#ce785c" stroke-width="6"/><path d="M286,40 Q304,120 286,200 M294,40 Q276,120 294,200" fill="#bde3e7" opacity=".8" stroke="#79b7c4"/><path d="M524,165 L598,165" stroke="#169eaf" stroke-width="10"/><text x="554" y="190">To brain</text>${rays}${image}<text x="28" y="26" fill="#c44458">Top of object → lower retina</text><text x="28" y="213" fill="#227ac1">Bottom → upper retina</text><text x="288" y="20" text-anchor="middle">Cornea + lens</text><text x="288" y="222" text-anchor="middle">Equivalent optical plane</text><text x="494" y="18">Retina</text><text x="553" y="148">Nerve</text>${Math.abs(o.power)>.01?'<line x1="134" y1="56" x2="134" y2="183" stroke="#00a1a6" stroke-width="4"/><text x="134" y="46" text-anchor="middle">Spectacle lens</text>':''}</svg>`;
+ $('optical-caption').textContent=state.condition==='glaucoma'?'Light still forms a reduced, inverted image on the retina. Glaucoma affects the nerve pathway carrying that information to the brain; the image is not formed on the optic nerve.':o.sharp?'The rays from each object point meet at the retina, forming a reduced, inverted image. The optic nerve carries electrical signals to the brain.':o.defocus>0?'Rays cross before the retina, then diverge and make a blurred retinal image. Light stops at the retina; the nerve carries electrical signals.':'The retina intercepts the rays before their ideal focus. Dashed extensions show where they would meet behind the retina; the retinal image is blurred.';
+}
+function updateGlaucomaPanel(){
+ const active=state.condition==='glaucoma';$('glaucoma-detail').hidden=!active;if(!active)return;
+ const stage=state.mode==='normal'?0:state.stage,cup=17+stage*17;
+ const disc=(x,r,title)=>`<g transform="translate(${x},68)"><circle r="44" fill="#d68c69"/><circle r="${r}" fill="#fbe4ba"/><path d="M0,-42 L0,42 M0,0 Q-18,-10 -32,-27 M0,0 Q18,12 32,27" fill="none" stroke="#a75048" stroke-width="3"/><text y="65" text-anchor="middle">${title}</text><text y="-51" text-anchor="middle">${r===17?'Neural rim preserved':'Thinner neural rim'}</text></g>`;
+ $('disc-comparison').innerHTML=`<svg viewBox="0 0 340 160" role="img" aria-label="Healthy optic disc with a small central cup compared with an illustrative disc with progressive rim loss and cup enlargement.">${disc(80,17,'Healthy reference')}${disc(250,cup,state.mode==='normal'?'Normal reference':'Selected damage')}</svg>`;
+ $('nerve-status').textContent=stage===0?'Early disease may have no noticeable field loss. A normal-looking view cannot exclude glaucoma.':`${state.stage<.35?'Mild':state.stage<.7?'Moderate':'Advanced'} illustrative damage: some nerve fibers no longer carry their visual signals.`;
+ $('treatment-message').textContent=state.mode==='correction'?'After pressure-lowering treatment: existing fiber damage, optic-disc change and field loss remain. Treatment aims to reduce further damage; the animation is not a predicted outcome.':state.mode==='normal'?'Healthy reference: intact nerve pathways carry the retinal signals to the brain.':'Move the damage slider to compare the nerve pathway and visual field. Pressure is a risk factor, not a direct measure of nerve damage.';
 }
 function drawVision(){
  const result=evaluate(comparing?{...state,mode:'normal'}:state),w=vision.width,h=vision.height;
@@ -79107,7 +79175,14 @@ function drawVision(){
  // The nearby book and distant sign respond differently to refractive errors.
  c.save();const nearBlur=state.condition==='hyperopia'?result.blur:state.condition==='cataract'?result.blur:result.blur*.15;c.filter=`blur(${nearBlur}px)`;c.fillStyle='#ab8b66';c.fillRect(0,344,w,76);c.fillStyle='#f8f4e7';c.beginPath();c.moveTo(45,400);c.lineTo(95,310);c.lineTo(244,310);c.lineTo(290,400);c.closePath();c.fill();c.strokeStyle='#acbaa9';c.lineWidth=2;for(let j=0;j<6;j++){c.beginPath();c.moveTo(104-j*4,325+j*10);c.lineTo(230+j*4,325+j*10);c.stroke();}c.fillStyle='#556865';c.font='bold 22px Arial';c.fillText('Near',132,349);c.restore();
  if(result.haze){c.fillStyle=`rgba(244,237,210,${result.haze})`;c.fillRect(0,0,w,h);const glare=c.createRadialGradient(605,68,5,605,68,155);glare.addColorStop(0,'rgba(255,255,235,.95)');glare.addColorStop(.2,`rgba(255,255,235,${result.haze})`);glare.addColorStop(1,'rgba(255,255,235,0)');c.fillStyle=glare;c.fillRect(0,0,w,h);}
- if(result.field>0){const radius=w*(.65-result.field*.38),g=c.createRadialGradient(w*.52,h*.5,radius*.45,w*.52,h*.5,radius);g.addColorStop(0,'rgba(72,79,80,0)');g.addColorStop(.5,`rgba(72,79,80,${result.field*.35})`);g.addColorStop(1,`rgba(60,69,73,${Math.min(.94,result.field+.1)})`);c.fillStyle=g;c.fillRect(0,0,w,h);for(let i=0;i<3;i++){const x=i===0?w*.12:i===1?w*.87:w*.8,y=i===0?h*.2:i===1?h*.7:h*.14;const s=c.createRadialGradient(x,y,10,x,y,70*result.field);s.addColorStop(0,`rgba(65,74,76,${result.field*.8})`);s.addColorStop(1,'rgba(65,74,76,0)');c.fillStyle=s;c.fillRect(0,0,w,h);}}
+ if(result.field>.03){
+  const severity=result.field;c.save();c.filter='blur(14px)';c.lineCap='round';
+  c.strokeStyle=`rgba(114,126,129,${Math.min(.9,severity*1.1)})`;c.lineWidth=20+severity*75;
+  // Illustrative arcuate defects above/below fixation, rather than uniform tunnel vision.
+  for(const side of [-1,1]){c.beginPath();c.moveTo(w*.12,h*(.5+side*.13));c.bezierCurveTo(w*.25,h*(.5+side*.38),w*.55,h*(.5+side*.34),w*.73,h*(.5+side*.12));c.stroke();}
+  c.restore();
+  if(severity>.65){const opacity=(severity-.65)/.35*.92,g=c.createRadialGradient(w*.52,h*.5,w*.14,w*.52,h*.5,w*.44);g.addColorStop(0,'rgba(114,126,129,0)');g.addColorStop(1,`rgba(114,126,129,${opacity})`);c.fillStyle=g;c.fillRect(0,0,w,h);}
+ }
  visionTexture.needsUpdate=true;
 }
 function update(){
@@ -79119,20 +79194,21 @@ function update(){
  $('power-control').hidden=disease;$('distance-control').hidden=disease;$('stage-control').hidden=!disease;
  $('power').value=state.power;$('power-value').textContent=`${state.power>0?'+':''}${state.power.toFixed(2)} D`;
  $('distance').value=state.distance;$('distance-value').textContent=`${state.distance.toFixed(2)} m`;
- $('stage').value=state.stage;$('stage-value').textContent=state.stage===0?'Early':state.stage<.35?'Mild':state.stage<.7?'Moderate':'Advanced';$('rays').checked=state.rays;
+ $('stage').value=state.stage;$('stage-value').textContent=state.stage===0?'No visible loss':state.stage<.35?'Mild':state.stage<.7?'Moderate':'Advanced';$('rays').checked=state.rays;
+ $('stage-label').textContent=state.condition==='glaucoma'?'Illustrative nerve damage':'Illustrative lens cloudiness';
  $('anatomy-text').innerHTML=lesson.anatomy;$('task-text').textContent=lesson.task;
  let tag,title,text;
  if(state.mode==='normal'){tag='NORMAL VISION';title='Light focuses on the retina';text='Compare this reference with the selected eye condition. Near objects require the eye to add focusing power.';}
- else if(state.condition==='glaucoma'){tag=state.mode==='correction'?'TREATMENT PROTECTS REMAINING VISION':'OPTIC NERVE DAMAGE';title=state.mode==='correction'?'Lost vision does not return':'The visual field can shrink';text=state.mode==='correction'?'Pressure-lowering treatment can slow or stop further damage. The existing field loss remains in this comparison.':'Early glaucoma often has no symptoms. Later stages may cause patchy loss of peripheral vision. This field effect is an illustration.';}
+ else if(state.condition==='glaucoma'){tag=state.mode==='correction'?'EXISTING DAMAGE REMAINS':'RETINAL FOCUS · NERVE DAMAGE';title=state.mode==='correction'?'Protect the vision that remains':'Focused light, missing visual signals';text=state.mode==='correction'?'Lowering pressure reduces the risk of further damage. It does not rebuild lost nerve fibers or restore the existing field loss shown here.':'The retina still receives the optical image. Damage to retinal ganglion cells and their axons interrupts parts of the signal sent to the brain. The optic nerve is not an image screen.';}
  else if(state.condition==='cataract'){tag=state.mode==='correction'?'ARTIFICIAL LENS IN PLACE':'CLOUDY LENS';title=state.mode==='correction'?'Light passes through a clear lens':'Haze, glare and reduced contrast';text=state.mode==='correction'?'Cataract surgery replaces the cloudy lens. This idealized demonstration shows improved clarity; real outcomes vary.':'A cataract scatters light inside the lens. Ordinary spectacle lenses cannot remove this cloudiness.';}
  else {tag=r.sharp?'FOCUS ON RETINA':r.defocus>0?'FOCUS BEFORE RETINA':'FOCUS BEHIND RETINA';title=r.sharp?'The image is in focus':state.condition==='myopia'?'Distant objects look blurred':'Near objects are harder to focus';text=r.sharp?'The model’s focusing power matches this object distance. Change the distance or lens power to test the result.':state.mode==='correction'?'Adjust lens power until the focus reaches the retina. This model includes limited accommodation.':state.condition==='myopia'?'A concave lens reduces optical power. Try bringing the object closer: a myopic eye can focus some near objects without correction.':'A convex lens adds optical power. Accommodation can compensate for some hyperopia, especially at longer distances.';}
  $('result-tag').textContent=tag;$('finding-title').textContent=title;$('finding-text').textContent=text;
- $('vision-caption').textContent=comparing?'Normal reference':state.mode==='normal'?'Normal reference':state.mode==='correction'?disease?'After treatment':'With corrective lens':'Without correction';
+ $('vision-caption').textContent=comparing?'Normal reference':state.mode==='normal'?'Normal reference':state.condition==='glaucoma'?state.mode==='correction'?'Existing field loss remains':'Illustrative reduced sensitivity':state.mode==='correction'?disease?'After treatment':'With corrective lens':'Without correction';
  if(renderer){updateModel();drawVision();updateVR();}
 }
 function choose(condition){comparing=false;state.condition=condition;state.mode='condition';state.power=0;state.stage=.5;state.distance=condition==='hyperopia'?.5:6;$('answer').value='';$('feedback').textContent='';update();}
-function apply(){state.mode='correction';if(lessons[state.condition].correctPower!==undefined)state.power=lessons[state.condition].correctPower;update();}
-function setMode(mode){state.mode=mode;if(mode==='correction'&&state.power===0&&!['glaucoma','cataract'].includes(state.condition))state.power=lessons[state.condition].correctPower;update();}
+function apply(){state.mode='correction';if(lessons[state.condition].correctPower!==undefined)state.power=Math.round(prescription(state.condition)*4)/4;update();}
+function setMode(mode){state.mode=mode;if(mode==='correction'&&state.power===0&&!['glaucoma','cataract'].includes(state.condition))state.power=Math.round(prescription(state.condition)*4)/4;update();}
 document.querySelectorAll('[data-condition]').forEach(b=>b.addEventListener('click',()=>choose(b.dataset.condition)));
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
 $('power').addEventListener('input',e=>{state.power=Number(e.target.value);state.mode='correction';update();});
@@ -79190,7 +79266,8 @@ function animate(time){
   if(grabbed)eye.rotation.y=grabbed.rotation.y-dragStart;
  }
  for(const l of labels)l.quaternion.copy(renderer.xr.isPresenting?renderer.xr.getCamera().quaternion:camera.quaternion);
- if(fluidGroup.visible){const flowing=state.mode!=='condition',speed=flowing?.00035:.00006;fluidGroup.children.forEach((p,i)=>{const t=(time*speed+i/12)%1,a=-Math.PI*.7+t*Math.PI*1.4;p.position.set(-.78-.27*Math.cos(a),.51*Math.sin(a),.16);p.material.color.set(flowing?0x00a6bd:0xd49931);});}
+ anatomy.animateSignals(time);
+ if(fluidGroup.visible){fluidGroup.children.forEach((p,i)=>{const t=(time*.00014+i/12)%1,a=-Math.PI*.7+t*Math.PI*1.4;p.position.set(-.78-.27*Math.cos(a),.51*Math.sin(a),.16);p.material.color.set(0x00a6bd);});}
  renderer.render(scene,camera);
 }
 async function enterVR(){
